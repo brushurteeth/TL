@@ -1,0 +1,14 @@
+
+from TL import *
+import arcade.draw_commands as DrawObj
+
+
+
+def main():
+    timeline = TimelineTL()           # Create and setup an instance of Timeline()
+    timeline.setup()
+    arcade.run()                    # Keeps the window up until someone closes it.
+
+
+if __name__ == "__main__":
+    main()
