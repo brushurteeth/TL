@@ -1,0 +1,353 @@
+import arcade
+import sys
+from TimelineMarker import *
+
+
+# Window
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+SCREEN_TITLE = "Timeline"
+DEFAULT_ZOOM_EBENE = 3        # ZOOM_EBENE = 0:jeder Schritt=1Tag, 1:1Monat, 2:3Monate, 3:1Jahr, 4:3Jahre
+WINDOW_HINTERGRUND_FARBE = arcade.csscolor.BLANCHED_ALMOND
+
+# Timeline
+FAKTOR_TIMELINE_HÖHE = 22
+DEFAULT_TIMELINE_HEIGHT = int(round(SCREEN_HEIGHT / FAKTOR_TIMELINE_HÖHE))
+TIMELINE_MARKER_ANZAHL = 6
+TIMELINE_MARKER_ABSTAND = 365
+TIMELINE_MARKER_WIDTH = 1
+TIMELINE_TEXT_HEIGHT = 18
+DEFAULT_YEAR = 1900
+
+# Scroll
+SCROLL_MAUS_ABSTAND = 30
+SCROLL_MAUS_GESCHWINDIGKEIT = 700
+SCROLL_SPEED_WASD = 500
+
+# Zoom
+DEFAULT_ZOOM = 100
+ZOOM_SPEED = 10
+MAX_ZOOM_EBENE = 10
+MIN_ZOOM_EBENE = 1
+
+
+
+
+
+
+class TimelineTL(arcade.Window):
+
+    def __init__(self):
+
+        # Call the parent Class and set up the window
+        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+
+        #  Lists
+        self.timeline_list = None
+        self.wall_list = None
+        self.timeline_marker_list = list(range(0, TIMELINE_MARKER_ANZAHL))
+
+
+        # Scroll & Zoom
+        self.zoom_faktor = 3
+        self.scroll_speed_x = 0 * self.zoom_faktor / DEFAULT_ZOOM
+        self.scroll_speed_y = 0 * self.zoom_faktor / DEFAULT_ZOOM
+        self.mouse_scroll_x = 0 * self.zoom_faktor / DEFAULT_ZOOM
+        self.mouse_scroll_y = 0 * self.zoom_faktor / DEFAULT_ZOOM
+        self.rauszoomen_press = False
+        self.reinzoomen_press = False
+        self.rauszoomen_hold = False
+        self.reinzoomen_hold = False
+        self.gezoomt = False
+
+
+        # Init background
+        # arcade.set_background_color(WINDOW_HINTERGRUND_FARBE)
+        self.background = None
+        self.background_width = SCREEN_WIDTH
+        self.background_height = SCREEN_HEIGHT - DEFAULT_TIMELINE_HEIGHT
+
+        # Init timeline
+        self.timeline_text_pos_y = (SCREEN_HEIGHT - DEFAULT_TIMELINE_HEIGHT - TIMELINE_TEXT_HEIGHT) / 2
+        self.timeline_marker_abstand = TIMELINE_MARKER_ABSTAND
+        self.timeline_text_pos_x = 0
+        self.timeline_text_pos_x_list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        self.year_list = [None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+                          None, None, None, None, None, None, None, None, None, None, None, None, None, ]
+        # @Nico, gibt's eig ne Möglichkeit das anders zu lösen?^^ wenn ich die leeren Stellen nicht platziere hat meine
+        # Liste null offene Positionen und ich kann keine Werte einfügen
+
+        self.breite = SCREEN_WIDTH
+        self.höhe = SCREEN_HEIGHT
+
+        # Init Viewport-Variablen
+        self.zoom_ebene = DEFAULT_ZOOM_EBENE
+        self.links = - SCREEN_WIDTH / 2
+        self.rechts = SCREEN_WIDTH / 2
+        self.unten = - SCREEN_HEIGHT / 2
+        self.oben = SCREEN_HEIGHT / 2
+        self.breite = self.rechts - self.links
+        self.höhe = self.oben - self.unten
+
+        self.wallpaper_pos_x = 0
+        self.wallpaper_pos_y = 0
+
+
+
+
+    def setup(self):
+
+        self.background = arcade.load_texture("images/Wallpaper/hellgrau.png")
+
+        # Create the Sprite lists
+        self.wall_list = arcade.SpriteList()
+        self.timeline_list = arcade.SpriteList()
+
+        wall = arcade.Sprite("images/Stickfigures/ground.png")
+        wall.center_x = 300
+        wall.center_y = 300
+        self.mouse_pos_x = int(SCREEN_WIDTH / 2)
+        self.mouse_pos_y = int(SCREEN_HEIGHT / 2)
+        self.mitte_x = 0
+        self.mitte_y = 0
+        self.wasd_up = - SCROLL_SPEED_WASD
+        self.wasd_down = - SCROLL_SPEED_WASD
+        self.wasd_right = - SCROLL_SPEED_WASD
+        self.wasd_left = - SCROLL_SPEED_WASD
+        self.wall_list.append(wall)
+
+
+        # Timeline Default Werte (timeline_background)
+        self.timeline_background = arcade.Sprite("images\Timeline/Timeline_Background.png")  # create timeline sprite
+        self.timeline_background.height = DEFAULT_TIMELINE_HEIGHT
+        self.timeline_background.center_x = int((round(self.oben -((
+                                                       self.oben -
+                                                       self.unten) / 2))))
+        self.timeline_background.center_y = int(round((self.rechts -((
+                                                       self.rechts -
+                                                       self.links) / 2) -
+                                                       self.timeline_background._get_height() / 2)))
+        self.timeline_list.append(self.timeline_background)
+
+
+        # einmaliges setzen der default-Werte (danach wird es in "def on_update()" immer geupated
+        self.timeline_marker_abstand = TIMELINE_MARKER_ABSTAND
+        for i in range(0, TIMELINE_MARKER_ANZAHL):
+            self.timeline_marker_list[i] = TimelineMarkerObj(self.timeline_marker_abstand * i, SCREEN_HEIGHT/2 - DEFAULT_TIMELINE_HEIGHT/2, DEFAULT_TIMELINE_HEIGHT, TIMELINE_MARKER_WIDTH)     # x, y, höhe, breite
+
+        self.timeline_text = arcade.draw_text("1920", 0, 0, arcade.color.BLACK, 16, 50)
+
+    def year_calc(self, x):
+        year = 1900 + x / 365          # @ Nico, ist nicht fertig, wird aktuell auch nicht benutzt
+        return year
+
+    def on_draw(self):
+        """ Render the screen. """
+
+        # Clear the screen to the background color
+        arcade.start_render()
+
+
+        # draw background image
+        arcade.draw_texture_rectangle(self.wallpaper_pos_x, self.wallpaper_pos_y, self.background_width, self.background_height, self.background)
+
+
+        # Draw your sprites
+        self.wall_list.draw()
+
+        # Draw timeline
+        self.timeline_background.draw()    # Druckt erste Position der Liste. In dem Fall mein "timeline_background"
+
+
+        for i in range(0, TIMELINE_MARKER_ANZAHL):
+            self.timeline_marker_list[i].draw()
+            arcade.draw_text(self.year_list[i], self.timeline_text_pos_x_list[i], self.timeline_text_pos_y,
+                             arcade.color.BLACK, self.timeline_text_height, self.timeline_text_width)
+
+
+
+
+    def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
+        self.mouse_scroll_x = scroll_x
+        self.mouse_scroll_y = scroll_y
+
+
+    def on_key_press(self, key, modifiers):
+        """called whenever a key is pressed"""
+        if key == arcade.key.ESCAPE:
+            sys.exit()
+        # WASD scrolling
+        else:
+            if key == arcade.key.W or key == arcade.key.UP:
+                self.wasd_up = SCROLL_SPEED_WASD
+            if key == arcade.key.S or key == arcade.key.DOWN:
+                self.wasd_down = SCROLL_SPEED_WASD
+            if key == arcade.key.D or key == arcade.key.RIGHT:
+                self.wasd_right = SCROLL_SPEED_WASD
+            if key == arcade.key.A or key == arcade.key.LEFT:
+                self.wasd_left = SCROLL_SPEED_WASD
+
+            # Zoom
+            if key == arcade.key.Q:
+                if self.rauszoomen_hold == False:
+                    if self.zoom_ebene < MAX_ZOOM_EBENE:
+                        self.rauszoomen_press = True
+                        self.rauszoomen_hold = True
+                    else:
+                        print("max Zoom Ebene erreicht")
+            elif key == arcade.key.E:
+                if self.reinzoomen_hold == False:
+                    if self.zoom_ebene > MIN_ZOOM_EBENE:
+                        self.reinzoomen_press = True
+                        self.reinzoomen_hold = True
+                    else:
+                        print("min Zoom Ebene erreicht")
+
+
+    def on_key_release(self, key, modifiers):
+        if key == arcade.key.W or key == arcade.key.UP:
+            self.wasd_up = - SCROLL_SPEED_WASD
+        if key == arcade.key.S or key == arcade.key.DOWN:
+            self.wasd_down = - SCROLL_SPEED_WASD
+        if key == arcade.key.D or key == arcade.key.RIGHT:
+            self.wasd_right = - SCROLL_SPEED_WASD
+        if key == arcade.key.A or key == arcade.key.LEFT:
+            self.wasd_left = - SCROLL_SPEED_WASD
+
+        # Zoom
+        if key == arcade.key.Q:
+            self.rauszoomen_hold = False
+        if key == arcade.key.E:
+            self.reinzoomen_hold = False
+
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        self.mouse_pos_x = x
+        self.mouse_pos_y = y
+
+    def isInteger(self, n):
+        if n % 2 == 0 or (n + 1) % 2 == 0:
+            return True
+        else:
+            return False
+
+    def update(self, delta_time):
+
+        # FPS Anzeige
+        FPS = int(round(1 / delta_time))
+        print("FPS: ", FPS)
+
+
+        # make sure the variables are still correct
+        self.current_view = self.get_viewport()
+        self.links = self.current_view[0]
+        self.rechts = self.current_view[1]
+        self.unten = self.current_view[2]
+        self.oben = self.current_view[3]
+        self.breite = self.rechts - self.links
+        self.höhe = self.oben - self.unten
+        self.mitte_x = self.rechts - self.breite / 2
+        self.mitte_y = self.oben - self.höhe / 2
+
+
+        # scroll
+        self.scroll_x = (self.wasd_right - self.wasd_left) * delta_time * self.breite / SCREEN_WIDTH
+        self.scroll_y = (self.wasd_up - self.wasd_down) * delta_time * self.höhe / SCREEN_HEIGHT
+
+        self.links += self.scroll_x
+        self.rechts += self.scroll_x
+        self.unten += self.scroll_y
+        self.oben += self.scroll_y
+
+        self.breite = self.rechts - self.links
+        self.höhe = self.oben - self.unten
+        self.mitte_x = self.rechts - self.breite / 2
+        self.mitte_y = self.oben - self.höhe / 2
+
+
+
+        # zoom
+
+        if self.rauszoomen_press == True:
+            if self.zoom_ebene < MAX_ZOOM_EBENE:
+                # self.zoom_faktor += 5 #* self.zoom_ebene
+                self.zoom_ebene += 1
+                self.breite = self.breite * self.zoom_faktor
+                self.höhe = self.höhe * self.zoom_faktor
+                self.links = self.mitte_x - self.breite / 2
+                self.rechts = self.mitte_x + self.breite / 2
+                self.unten = self.mitte_y - self.höhe / 2
+                self.oben = self.mitte_y + self.höhe / 2
+                self.rauszoomen_press = False
+                if self.zoom_faktor == 3:
+                    self.zoom_faktor = 10 / 3
+                else:
+                    self.zoom_faktor = 3
+            else:
+                print("max Zoom Ebene erreicht")
+
+        elif self.reinzoomen_press == True:
+            if self.zoom_ebene > MIN_ZOOM_EBENE:
+                # self.zoom_faktor -= 5 # * self.zoom_ebene
+                self.zoom_ebene -= 1
+                self.breite = self.breite / self.zoom_faktor
+                self.höhe = self.höhe / self.zoom_faktor
+                self.links = self.mitte_x - self.breite / 2
+                self.rechts = int(round(self.mitte_x + self.breite / 2))
+                self.unten = self.mitte_y - self.höhe / 2
+                self.oben = self.mitte_y + self.höhe / 2
+                self.reinzoomen_press = False
+                if self.zoom_faktor == 3:
+                    self.zoom_faktor = 10/3
+                else:
+                    self.zoom_faktor = 3
+            else:
+                print("min Zoom Ebene erreicht")
+
+
+        # Update Background Position
+        self.background_width = self.breite
+        self.background_height = self.höhe - self.höhe / FAKTOR_TIMELINE_HÖHE / 2
+        self.wallpaper_pos_x = self.mitte_x
+        self.wallpaper_pos_y = self.mitte_y - self.höhe / FAKTOR_TIMELINE_HÖHE / 2
+
+
+
+        # Update Timeline_(Background)
+        self.timeline_background.height = int(round((self.höhe) / FAKTOR_TIMELINE_HÖHE))  # screen height noch adaptiv machen
+        self.timeline_background.width = int(round(self.breite))
+        self.timeline_background.center_x = int(round(self.links +(self.timeline_background._get_width() / 2)))
+        self.timeline_background.center_y = int(round(self.oben - self.timeline_background._get_height() / 2))  # int(round(self.timeline_background._get_height() / 2))
+        self.timeline_list.append(self.timeline_background)
+
+
+        # Update Timeline (Marker)
+        for i in range(0, TIMELINE_MARKER_ANZAHL):        # Höhe der Marker immer am Viewport anpassen
+            self.timeline_marker_list[i].set_position_y(int(round(self.oben - self.timeline_background.height / 2)))
+            self.timeline_marker_list[i].set_width(int(round(self.breite / SCREEN_WIDTH)))
+            self.timeline_marker_list[i].set_height(int(round(self.höhe / FAKTOR_TIMELINE_HÖHE)))
+
+
+
+        # Update Timeline (Text)
+        self.timeline_text_width = int(round(200 * self.breite / SCREEN_WIDTH))          # iwie scheinen breite und höhe vertauscht. scheint aber zu funktionieren
+        self.timeline_text_height = int(round(20 * self.höhe / SCREEN_HEIGHT))
+        self.timeline_text_pos_y = self.oben - (self.timeline_text_height + self.timeline_background.height) / 2
+
+
+
+        # Timeline Text List
+        # print(self.current_view) # Startet bei L0, R1200, U0, O800
+        for x in range(int(round(self.links - self.breite / 2)), int(round(self.rechts - self.breite / 2))):                                            # Position Timeline-Text with distance of 365. (nur für zoom-ebene 3, wo ein Marker ein Jahr repräsentiert)
+            if self.isInteger(x / 365):
+                for i in range(0, TIMELINE_MARKER_ANZAHL):
+                    self.timeline_text_pos_x = x - self.timeline_text_width / 10
+                    self.timeline_text_pos_x_list[i] = self.timeline_text_pos_x
+                    year = DEFAULT_YEAR + self.timeline_text_pos_x / 365
+                    self.year_list[i] = str(int(year))
+
+
+        arcade.set_viewport(self.links, self.rechts, self.unten, self.oben)
+
+
+
