@@ -1,13 +1,15 @@
-import arcade
 import sys
-from TimelineMarker import *
 
+import pandas as pd
+
+from CountryObj import *
+from TimelineMarker import *
 
 # Window
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800
 SCREEN_TITLE = "Timeline"
-DEFAULT_ZOOM_EBENE = 3        # ZOOM_EBENE = 0:jeder Schritt=1Tag, 1:1Monat, 2:3Monate, 3:1Jahr, 4:3Jahre
+DEFAULT_ZOOM_EBENE = 3  # ZOOM_PERSEKTIVE = 0 (jeder Schritt=1Tag), 1=1Monat, 2=3Monate, 3=1Jahr, 4=3Jahre
 WINDOW_HINTERGRUND_FARBE = arcade.csscolor.BLANCHED_ALMOND
 
 # Timeline
@@ -31,26 +33,33 @@ MAX_ZOOM_EBENE = 10
 MIN_ZOOM_EBENE = 1
 
 
-
-
-
-
-class TimelineTL(arcade.Window):
+class TimelineDrei(arcade.Window):
 
     def __init__(self):
 
         # Call the parent Class and set up the window
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
 
-        #  Lists
+        #  Listen
         self.timeline_list = None
         self.wall_list = None
-        self.timeline_marker_list = list(range(0, TIMELINE_MARKER_ANZAHL))
+
+        self.timeline_marker_list = list(range(0, 99))
+        for i in range(0, 99):
+            self.timeline_marker_list[i] = TimelineMarkerObj(0, 0, 0, 0)  # x, y, höhe, breite
+
+        self.country_list = list(range(0, 99))
+        for i in range(0, 99):  # 0, 1.
+            self.country_list[i] = CountryObj()
+
+        # Physics Engine
+        self.physics_engine = None
 
 
         # Scroll & Zoom
+        # self.zoom_faktor = DEFAULT_ZOOM
         self.zoom_faktor = 3
-        self.scroll_speed_x = 0 * self.zoom_faktor / DEFAULT_ZOOM
+        self.scroll_speed_x = 0 * self.zoom_faktor / DEFAULT_ZOOM  # geteilt durch aktueller Zoom, multiplitziert mit default zoom ??? ?
         self.scroll_speed_y = 0 * self.zoom_faktor / DEFAULT_ZOOM
         self.mouse_scroll_x = 0 * self.zoom_faktor / DEFAULT_ZOOM
         self.mouse_scroll_y = 0 * self.zoom_faktor / DEFAULT_ZOOM
@@ -59,6 +68,7 @@ class TimelineTL(arcade.Window):
         self.rauszoomen_hold = False
         self.reinzoomen_hold = False
         self.gezoomt = False
+
 
 
         # Init background
@@ -71,11 +81,8 @@ class TimelineTL(arcade.Window):
         self.timeline_text_pos_y = (SCREEN_HEIGHT - DEFAULT_TIMELINE_HEIGHT - TIMELINE_TEXT_HEIGHT) / 2
         self.timeline_marker_abstand = TIMELINE_MARKER_ABSTAND
         self.timeline_text_pos_x = 0
-        self.timeline_text_pos_x_list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        self.year_list = [None, None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-                          None, None, None, None, None, None, None, None, None, None, None, None, None, ]
-        # @Nico, gibt's eig ne Möglichkeit das anders zu lösen?^^ wenn ich die leeren Stellen nicht platziere hat meine
-        # Liste null offene Positionen und ich kann keine Werte einfügen
+        self.timeline_text_pos_x_list = list(range(0, 99))
+        self.year_list = list(range(0, 99))
 
         self.breite = SCREEN_WIDTH
         self.höhe = SCREEN_HEIGHT
@@ -92,13 +99,23 @@ class TimelineTL(arcade.Window):
         self.wallpaper_pos_x = 0
         self.wallpaper_pos_y = 0
 
-
-
+        self.testvariable = False
+        self.counter = 0
+        self.counter_timeline_marker = 0
+        self.visible_countries_list = list(range(0, 99))
+        for i in range(0, 99):
+            self.visible_countries_list[i] = CountryObj()
+        self.isFirstRound = True
+        self.visible_countries_list_länge = 0
 
     def setup(self):
 
+        # self.deutschland = CountryObj()
+        # self.deutschland.setup("Deutschland", -2000, 2000)
+
         self.background = arcade.load_texture("images/Wallpaper/hellgrau.png")
 
+        """ Set up the game here. Call this function to restart the game. """
         # Create the Sprite lists
         self.wall_list = arcade.SpriteList()
         self.timeline_list = arcade.SpriteList()
@@ -110,35 +127,29 @@ class TimelineTL(arcade.Window):
         self.mouse_pos_y = int(SCREEN_HEIGHT / 2)
         self.mitte_x = 0
         self.mitte_y = 0
-        self.wasd_up = - SCROLL_SPEED_WASD
+        self.wasd_up = - SCROLL_SPEED_WASD  # auch einstellen dass man mit Q und E zoomen kann
         self.wasd_down = - SCROLL_SPEED_WASD
         self.wasd_right = - SCROLL_SPEED_WASD
         self.wasd_left = - SCROLL_SPEED_WASD
         self.wall_list.append(wall)
 
-
         # Timeline Default Werte (timeline_background)
         self.timeline_background = arcade.Sprite("images\Timeline/Timeline_Background.png")  # create timeline sprite
         self.timeline_background.height = DEFAULT_TIMELINE_HEIGHT
-        self.timeline_background.center_x = int((round(self.oben -((
-                                                       self.oben -
-                                                       self.unten) / 2))))
-        self.timeline_background.center_y = int(round((self.rechts -((
-                                                       self.rechts -
-                                                       self.links) / 2) -
-                                                       self.timeline_background._get_height() / 2)))
+        self.timeline_background.center_x = int((round(self.oben - ((
+                                                                            self.oben -
+                                                                            self.unten) / 2))))
+        self.timeline_background.center_y = int(round((self.rechts - ((
+                                                                              self.rechts -
+                                                                              self.links) / 2) -
+                                                       self.timeline_background._get_height() / 2)))  # int(round(self.timeline_background._get_height() / 2))
         self.timeline_list.append(self.timeline_background)
-
 
         # einmaliges setzen der default-Werte (danach wird es in "def on_update()" immer geupated
         self.timeline_marker_abstand = TIMELINE_MARKER_ABSTAND
-        for i in range(0, TIMELINE_MARKER_ANZAHL):
-            self.timeline_marker_list[i] = TimelineMarkerObj(self.timeline_marker_abstand * i, SCREEN_HEIGHT/2 - DEFAULT_TIMELINE_HEIGHT/2, DEFAULT_TIMELINE_HEIGHT, TIMELINE_MARKER_WIDTH)     # x, y, höhe, breite
-
-        self.timeline_text = arcade.draw_text("1920", 0, 0, arcade.color.BLACK, 16, 50)
 
     def year_calc(self, x):
-        year = 1900 + x / 365          # @ Nico, ist nicht fertig, wird aktuell auch nicht benutzt
+        year = 1900 + x / 365
         return year
 
     def on_draw(self):
@@ -147,30 +158,34 @@ class TimelineTL(arcade.Window):
         # Clear the screen to the background color
         arcade.start_render()
 
-
         # draw background image
-        arcade.draw_texture_rectangle(self.wallpaper_pos_x, self.wallpaper_pos_y, self.background_width, self.background_height, self.background)
+        arcade.draw_texture_rectangle(self.wallpaper_pos_x, self.wallpaper_pos_y, self.background_width,
+                                      self.background_height, self.background)
+
+        if self.isFirstRound == False:
+            # self.visible_countries_list[0].draw(self.links, self.rechts, SCREEN_WIDTH, self.oben-100)
+            # print(self.country_list[0])
+            for i in range(0, self.visible_countries_list_länge):
+                pos_y = int(round(350 - 300 * i))
+                # self.visible_countries_list[i].draw(self.links, self.rechts, SCREEN_WIDTH, pos_x, 200)
+                # self.visible_countries_list[i].draw(self.links, self.rechts, SCREEN_WIDTH, pos_x)
+                self.visible_countries_list[i].draw(self.links, self.rechts, SCREEN_WIDTH, pos_y)
 
 
         # Draw your sprites
         self.wall_list.draw()
 
         # Draw timeline
-        self.timeline_background.draw()    # Druckt erste Position der Liste. In dem Fall mein "timeline_background"
+        self.timeline_background.draw()  # Druckt erste Position der Liste. In dem Fall mein "timeline_background"
 
-
-        for i in range(0, TIMELINE_MARKER_ANZAHL):
+        for i in range(0, self.counter_timeline_marker):
             self.timeline_marker_list[i].draw()
             arcade.draw_text(self.year_list[i], self.timeline_text_pos_x_list[i], self.timeline_text_pos_y,
                              arcade.color.BLACK, self.timeline_text_height, self.timeline_text_width)
 
-
-
-
     def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
         self.mouse_scroll_x = scroll_x
         self.mouse_scroll_y = scroll_y
-
 
     def on_key_press(self, key, modifiers):
         """called whenever a key is pressed"""
@@ -191,6 +206,7 @@ class TimelineTL(arcade.Window):
             if key == arcade.key.Q:
                 if self.rauszoomen_hold == False:
                     if self.zoom_ebene < MAX_ZOOM_EBENE:
+                        self.testvariable = True
                         self.rauszoomen_press = True
                         self.rauszoomen_hold = True
                     else:
@@ -202,7 +218,6 @@ class TimelineTL(arcade.Window):
                         self.reinzoomen_hold = True
                     else:
                         print("min Zoom Ebene erreicht")
-
 
     def on_key_release(self, key, modifiers):
         if key == arcade.key.W or key == arcade.key.UP:
@@ -220,7 +235,6 @@ class TimelineTL(arcade.Window):
         if key == arcade.key.E:
             self.reinzoomen_hold = False
 
-
     def on_mouse_motion(self, x, y, dx, dy):
         self.mouse_pos_x = x
         self.mouse_pos_y = y
@@ -237,7 +251,6 @@ class TimelineTL(arcade.Window):
         FPS = int(round(1 / delta_time))
         print("FPS: ", FPS)
 
-
         # make sure the variables are still correct
         self.current_view = self.get_viewport()
         self.links = self.current_view[0]
@@ -248,7 +261,6 @@ class TimelineTL(arcade.Window):
         self.höhe = self.oben - self.unten
         self.mitte_x = self.rechts - self.breite / 2
         self.mitte_y = self.oben - self.höhe / 2
-
 
         # scroll
         self.scroll_x = (self.wasd_right - self.wasd_left) * delta_time * self.breite / SCREEN_WIDTH
@@ -263,8 +275,6 @@ class TimelineTL(arcade.Window):
         self.höhe = self.oben - self.unten
         self.mitte_x = self.rechts - self.breite / 2
         self.mitte_y = self.oben - self.höhe / 2
-
-
 
         # zoom
 
@@ -298,12 +308,11 @@ class TimelineTL(arcade.Window):
                 self.oben = self.mitte_y + self.höhe / 2
                 self.reinzoomen_press = False
                 if self.zoom_faktor == 3:
-                    self.zoom_faktor = 10/3
+                    self.zoom_faktor = 10 / 3
                 else:
                     self.zoom_faktor = 3
             else:
                 print("min Zoom Ebene erreicht")
-
 
         # Update Background Position
         self.background_width = self.breite
@@ -311,43 +320,63 @@ class TimelineTL(arcade.Window):
         self.wallpaper_pos_x = self.mitte_x
         self.wallpaper_pos_y = self.mitte_y - self.höhe / FAKTOR_TIMELINE_HÖHE / 2
 
-
-
         # Update Timeline_(Background)
-        self.timeline_background.height = int(round((self.höhe) / FAKTOR_TIMELINE_HÖHE))  # screen height noch adaptiv machen
+        self.timeline_background.height = int(
+            round((self.höhe) / FAKTOR_TIMELINE_HÖHE))  # screen height noch adaptiv machen
         self.timeline_background.width = int(round(self.breite))
-        self.timeline_background.center_x = int(round(self.links +(self.timeline_background._get_width() / 2)))
-        self.timeline_background.center_y = int(round(self.oben - self.timeline_background._get_height() / 2))  # int(round(self.timeline_background._get_height() / 2))
+        self.timeline_background.center_x = int(round(self.links + (self.timeline_background._get_width() / 2)))
+        self.timeline_background.center_y = int(round(
+            self.oben - self.timeline_background._get_height() / 2))  # int(round(self.timeline_background._get_height() / 2))
         self.timeline_list.append(self.timeline_background)
 
 
-        # Update Timeline (Marker)
-        for i in range(0, TIMELINE_MARKER_ANZAHL):        # Höhe der Marker immer am Viewport anpassen
-            self.timeline_marker_list[i].set_position_y(int(round(self.oben - self.timeline_background.height / 2)))
-            self.timeline_marker_list[i].set_width(int(round(self.breite / SCREEN_WIDTH)))
-            self.timeline_marker_list[i].set_height(int(round(self.höhe / FAKTOR_TIMELINE_HÖHE)))
-
-
-
         # Update Timeline (Text)
-        self.timeline_text_width = int(round(200 * self.breite / SCREEN_WIDTH))          # iwie scheinen breite und höhe vertauscht. scheint aber zu funktionieren
+        self.timeline_text_width = int(round(
+            200 * self.breite / SCREEN_WIDTH))  # iwie scheinen breite und höhe vertauscht. scheint aber zu funktionieren
         self.timeline_text_height = int(round(20 * self.höhe / SCREEN_HEIGHT))
         self.timeline_text_pos_y = self.oben - (self.timeline_text_height + self.timeline_background.height) / 2
 
-
-
         # Timeline Text List
-        # print(self.current_view) # Startet bei L0, R1200, U0, O800
-        for x in range(int(round(self.links - self.breite / 2)), int(round(self.rechts - self.breite / 2))):                                            # Position Timeline-Text with distance of 365. (nur für zoom-ebene 3, wo ein Marker ein Jahr repräsentiert)
-            if self.isInteger(x / 365):
-                for i in range(0, TIMELINE_MARKER_ANZAHL):
-                    self.timeline_text_pos_x = x - self.timeline_text_width / 10
-                    self.timeline_text_pos_x_list[i] = self.timeline_text_pos_x
-                    year = DEFAULT_YEAR + self.timeline_text_pos_x / 365
-                    self.year_list[i] = str(int(year))
+        self.counter_timeline_marker = 0  # Der Code hier wird für jeden Frame durchlaufen
+        for x in range(int(round(self.links)), int(round(
+                self.rechts))):  # iteriert für alle Werte von x = self.links bis x = self.rechts    (wobei self.links = aktueller inker Bildschirmrand)
+            position = x / 365
+            if self.isInteger(
+                    position):  # Wenn "position" eine ganze Zahl ist, dann wird der nachstehende, eingerückte Code durchlaufen
+                # for i in range(0, TIMELINE_MARKER_ANZAHL):
+                self.timeline_text_pos_x = x - self.timeline_text_width / 10
+                self.timeline_text_pos_x_list[
+                    self.counter_timeline_marker] = self.timeline_text_pos_x  # Es gibt eine Liste mit Positionen des Textes. Die entsprechende Stelle in der Liste wird mit [self.counter] referenziert
+                year = position + DEFAULT_YEAR
+                self.year_list[self.counter_timeline_marker] = str(int(year))
+
+                self.timeline_marker_list[self.counter_timeline_marker].set_position_y(
+                    int(round(self.oben - self.timeline_background.height / 2)))
+                self.timeline_marker_list[self.counter_timeline_marker].set_position_x(int(round(x)))
+                self.timeline_marker_list[self.counter_timeline_marker].set_width(
+                    int(round(self.breite / SCREEN_WIDTH)))
+                self.timeline_marker_list[self.counter_timeline_marker].set_height(
+                    int(round(self.höhe / FAKTOR_TIMELINE_HÖHE)))
+
+                self.counter_timeline_marker += 1
+
+        for i in range(0, 99):  # 0, 1.
+            self.country_list[i] = CountryObj()
+        df_countries = pd.read_csv("data/countries.txt", names=("name", "date_start", "date_end"))
+        for i in range(0, 2):  # 0, 1.
+            name = df_countries.iat[i, 0]
+            date_start = df_countries.iat[i, 1]
+            date_end = df_countries.iat[i, 2]
+            self.country_list[i].setup(name, date_start, date_end)
+
+        # Countries
+        self.visible_countries_list_länge = 0
+        for i in range(0, 99):
+            if self.country_list[i].isSetUp == True:
+                if self.country_list[i].isVisible(self.links, self.rechts):
+                    self.visible_countries_list[self.visible_countries_list_länge] = self.country_list[i]
+                    self.visible_countries_list_länge += 1
 
 
         arcade.set_viewport(self.links, self.rechts, self.unten, self.oben)
-
-
-
+        self.isFirstRound = False
